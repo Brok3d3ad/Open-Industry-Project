@@ -31,14 +31,13 @@ var _help_popup_menu: PopupMenu
 
 # Menu item IDs
 const ID_TOGGLE_NATIVE_UI = 1234
-# The IDs here must match those in _project_popup_menu and CustomProject.tscn.
+# The IDs here must match those in the original Project menu (_project_popup_menu).
 const ID_PROJECT_SETTINGS = 18
 const ID_PACK_PROJECT_AS_ZIP = 21
 const ID_OPEN_USER_DATA_FOLDER = 23
 const ID_RELOAD_CURRENT_PROJECT = 24
 const ID_QUIT_TO_PROJECT_LIST = 25
-const NATIVE_PROJECT_MENU_ITEM_IDS = [ID_PROJECT_SETTINGS, ID_PACK_PROJECT_AS_ZIP, ID_OPEN_USER_DATA_FOLDER, ID_RELOAD_CURRENT_PROJECT, ID_QUIT_TO_PROJECT_LIST]
-# This ID must match the ID for the "Search Help..." item in the native Help menu (_help_popup_menu).
+# This ID must match the ID for the "Search Help..." item in the original Help menu (_help_popup_menu).
 const ID_SEARCH_HELP = 44
 
 # Top bar content
@@ -72,6 +71,11 @@ func _scene_changed(root : Node):
 		
 
 func _enter_tree() -> void:
+	# Set minimum editor window size to 1075px width for the OIP plugin
+	var editor_window = EditorInterface.get_base_control().get_window()
+	var current_min_size = editor_window.get_min_size()
+	editor_window.set_min_size(Vector2(1075, current_min_size.y))
+	
 	_editor_node = get_tree().root.get_child(0)
 
 	if(EditorInterface.has_method("mark_scene_as_saved")):
@@ -92,6 +96,10 @@ func _on_id_pressed(id: int) -> void:
 	roof.visible = is_perspective_checked || (id > 0 && id < 8)
 
 func _exit_tree() -> void:
+	# Reset minimum window size when plugin is disabled
+	var editor_window = EditorInterface.get_base_control().get_window()
+	editor_window.set_min_size(Vector2(0, 0))
+	
 	_center_buttons.visible = true
 
 	if _run_bar:
@@ -156,8 +164,9 @@ func _editor_layout_loaded():
 
 	_toggle_view = TOGGLE_VIEW.instantiate()
 	_title_bar.add_child(_toggle_view)
-
-	_empty_margin.custom_minimum_size = Vector2(165, 0)
+	
+	# Set fixed size for empty margin to ensure buttons are properly spaced
+	_empty_margin.custom_minimum_size = Vector2(20, 0)
 
 	_editor_popup_menu.add_separator()
 	_editor_popup_menu.add_check_item("Toggle Godot Native UI",ID_TOGGLE_NATIVE_UI)
@@ -266,12 +275,48 @@ func _on_editor_popup_id_pressed(id: int) -> void:
 
 
 func _on_custom_project_menu_id_pressed(id: int) -> void:
-	if id in NATIVE_PROJECT_MENU_ITEM_IDS:
-		_project_popup_menu.id_pressed.emit(id)
+	# Piggyback off the original project menu by emitting its events.
+	var native_item_id
+	match id:
+		0:
+			native_item_id = ID_PROJECT_SETTINGS
+		1:
+			native_item_id = ID_PACK_PROJECT_AS_ZIP
+		2:
+			native_item_id = ID_OPEN_USER_DATA_FOLDER
+		3:
+			native_item_id = ID_RELOAD_CURRENT_PROJECT
+		4:
+			native_item_id = ID_QUIT_TO_PROJECT_LIST
+		_:
+			native_item_id = null
+	# Check if the ID still exists in the original menu.
+	# If not, the menu ID constants need to be updated.
+	if native_item_id == null or -1 == _project_popup_menu.get_item_index(native_item_id):
+		print("Menu item broken! OIP maintainers should fix it with the info below.")
+		print("Valid 'Project' menu item IDs:")
+		_print_menu_ids(_project_popup_menu)
+		return
+	_project_popup_menu.id_pressed.emit(native_item_id)
 
 
 func _on_custom_help_menu_id_pressed(id: int) -> void:
 	if id == 0:
-		_help_popup_menu.id_pressed.emit(ID_SEARCH_HELP)
+		# Piggyback off the original help menu by emitting its event.
+		var native_item_id = ID_SEARCH_HELP
+		# Check if the ID still exists in the original menu.
+		# If not, the menu ID constants need to be updated.
+		if native_item_id == null or -1 == _help_popup_menu.get_item_index(native_item_id):
+			print("Menu item broken! OIP maintainers should fix it with the info below.")
+			print("Valid 'Help' menu item IDs:")
+			_print_menu_ids(_help_popup_menu)
+			return
+		_help_popup_menu.id_pressed.emit(native_item_id)
 	if id == 2:
 		OS.shell_open("https://github.com/Open-Industry-Project/Open-Industry-Project")
+
+static func _print_menu_ids(menu: PopupMenu) -> void:
+	for item_index in range(menu.item_count):
+		var item_id = menu.get_item_id(item_index)
+		var item_text = menu.get_item_text(item_index)
+		print("* " + str(item_id) + ": " + item_text)
